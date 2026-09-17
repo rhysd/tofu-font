@@ -1,10 +1,11 @@
 Tofu font
 =========
+[![CI badge][]][CI]
 
-[Tofu font][] is a special-purpose font that contains a single [`.notdef` glyph][wikipedia], "tofu". Its `cmap` is
-intentionally empty. When an application explicitly selects `.notdef` glyph as its final fallback and shapes text,
-unsupported visible characters resolve to the `.notdef` glyph. Tofu is designed to be embedded in an application binary
-and is only 688 bytes.
+[Tofu font][] is a special-purpose font that contains a single [`.notdef` glyph][wikipedia], "tofu". Tofu is designed to
+be embedded in an application binary and is only 688 bytes. Its `cmap` is intentionally empty. When an application
+explicitly selects `.notdef` glyph as its final fallback and shapes text, unsupported visible characters resolve to the
+`.notdef` glyph. 
 
 Because the empty `cmap` advertises no character coverage, the application must explicitly select Tofu and must be able
 to shape missing characters to glyph ID 0.
@@ -63,3 +64,5 @@ bash ./check.bash
 [Adobe NotDef]: https://github.com/adobe-fonts/adobe-notdef
 [Last Resort]: https://github.com/unicode-org/last-resort-font
 [cmap format 13]: https://learn.microsoft.com/en-us/typography/opentype/spec/cmap#format-13-many-to-one-range-mappings
+[CI]: https://github.com/rhysd/tofu-font/actions/workflows/ci.yml
+[CI badge]: https://github.com/rhysd/tofu-font/actions/workflows/ci.yml/badge.svg
