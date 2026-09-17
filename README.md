@@ -13,7 +13,7 @@ to shape missing characters to glyph ID 0.
 
 Download `tofu-font.zip` from the latest release on the [releases page][releases].
 
-Alternatively, generate `Tofu.ttf` as described in the Development section below.
+Alternatively generate `Tofu.ttf` following the instruction in the Development section below.
 
 ## Comparison with existing fonts
 
@@ -21,16 +21,15 @@ Alternatively, generate `Tofu.ttf` as described in the Development section below
   `cmap` formats 4 and 12 to 2,048 non-zero tofu glyphs. Tofu is smaller because it has an empty `cmap` and only glyph
   ID 0.
 - [Last Resort][] is a font for a similar purpose to Tofu. It includes a collection of glyphs representing different
-  Unicode character ranges. Last Resort High-Efficiency uses [cmap format 13][format-13] but still contains hundreds
-  of glyphs.
+  Unicode character ranges. Last Resort High-Efficiency uses [cmap format 13][] but still contains hundreds of glyphs.
 
 | Font | Version | Size (bytes) |
 |-|-|-:|
-| Tofu.ttf | Current build | 688 |
+| Tofu.ttf | 1.0.0 | 688 |
 | AND-Regular.otf | 1.001 | 20,896 |
 | AND-Regular.ttf | 1.001 | 219,320 |
-| LastResortHE-Regular.ttf | 18.000 (Unicode 18.0.0) | 587,864 |
-| LastResort-Regular.ttf | 18.000 (Unicode 18.0.0) | 9,592,228 |
+| LastResortHE-Regular.ttf | 18.000 | 587,864 |
+| LastResort-Regular.ttf | 18.000 | 9,592,228 |
 
 ## License
 
@@ -60,7 +59,7 @@ bash ./check.bash
 
 [Tofu font]: https://github.com/rhysd/tofu-font
 [wikipedia]: https://en.wikipedia.org/wiki/Notdef_glyph
-[format-13]: https://learn.microsoft.com/en-us/typography/opentype/spec/cmap#format-13-many-to-one-range-mappings
 [releases]: https://github.com/rhysd/tofu-font/releases
 [Adobe NotDef]: https://github.com/adobe-fonts/adobe-notdef
 [Last Resort]: https://github.com/unicode-org/last-resort-font
+[cmap format 13]: https://learn.microsoft.com/en-us/typography/opentype/spec/cmap#format-13-many-to-one-range-mappings
