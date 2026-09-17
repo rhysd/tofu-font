@@ -7,7 +7,6 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 
-
 ROOT = Path(__file__).resolve().parent
 SOURCE_FILE = ROOT / "adobe-notdef" / "AND-Regular.ttf"
 OUTPUT_FILE = ROOT / "dist" / "Tofu.ttf"
@@ -58,9 +57,7 @@ def build_font() -> bytes:
     # every character resolve to GID 0 while keeping maxp.numGlyphs exactly 1.
     builder.setupCharacterMap({})
     builder.setupGlyf({".notdef": glyph})
-    builder.setupHorizontalMetrics(
-        {".notdef": (advance_width, left_side_bearing)}
-    )
+    builder.setupHorizontalMetrics({".notdef": (advance_width, left_side_bearing)})
     builder.setupHorizontalHeader(ascent=880, descent=-120, lineGap=0)
     builder.setupNameTable(
         {

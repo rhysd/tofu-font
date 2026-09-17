@@ -1,17 +1,15 @@
-#!/usr/bin/env python3
 """Validate the generated Tofu font in ./dist."""
 
-from io import BytesIO
-from pathlib import Path
 import struct
 import unittest
+from io import BytesIO
+from pathlib import Path
 
+import uharfbuzz as hb
 from fontTools.pens.recordingPen import RecordingPen
 from fontTools.ttLib import TTFont
-import uharfbuzz as hb
 
 import generate
-
 
 ROOT = Path(__file__).resolve().parent
 FONT_PATH = ROOT / "dist" / "Tofu.ttf"
@@ -62,12 +60,8 @@ class TofuFontTest(unittest.TestCase):
                 f"Generated font does not exist: {FONT_PATH}. Run `python ./generate.py` before running the tests."
             )
         cls.font_bytes = FONT_PATH.read_bytes()
-        cls.font = TTFont(
-            BytesIO(cls.font_bytes), recalcTimestamp=False, lazy=False
-        )
-        cls.source = TTFont(
-            generate.SOURCE_FILE, recalcTimestamp=False, lazy=False
-        )
+        cls.font = TTFont(BytesIO(cls.font_bytes), recalcTimestamp=False, lazy=False)
+        cls.source = TTFont(generate.SOURCE_FILE, recalcTimestamp=False, lazy=False)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -131,7 +125,10 @@ class TofuFontTest(unittest.TestCase):
         self.assertEqual(_sfnt_checksum(self.font_bytes), 0xB1B0AFBA)
 
     def test_mixed_real_world_text_shapes_to_tofu(self) -> None:
-        for text in ("Hello, \u4e16\u754c \U0001f44b", "\u0645\u0631\u062d\u0628\u0627"):
+        for text in (
+            "Hello, \u4e16\u754c \U0001f44b",
+            "\u0645\u0631\u062d\u0628\u0627",
+        ):
             with self.subTest(text=text):
                 shaped = _shape(self.font_bytes, text)
                 self.assertEqual(
