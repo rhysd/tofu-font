@@ -1,11 +1,16 @@
 """Validate the generated Tofu font in ./dist."""
 
+import copy
+import plistlib
 import struct
 import unittest
+import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
 
 import uharfbuzz as hb
+import unicodedata2
+from fontTools.misc.roundTools import otRound
 from fontTools.pens.recordingPen import RecordingPen
 from fontTools.ttLib import TTFont
 
@@ -62,7 +67,9 @@ class TofuFontTest(unittest.TestCase):
             )
         cls.font_bytes = FONT_PATH.read_bytes()
         cls.font = TTFont(BytesIO(cls.font_bytes), recalcTimestamp=False, lazy=False)
-        cls.source = TTFont(generate.SOURCE_FILE, recalcTimestamp=False, lazy=False)
+        cls.source = TTFont(
+            generate.ADOBE_NOTDEF_FILE, recalcTimestamp=False, lazy=False
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -190,7 +197,9 @@ class TofuMonoFontTest(unittest.TestCase):
             )
         cls.font_bytes = MONO_FONT_PATH.read_bytes()
         cls.font = TTFont(BytesIO(cls.font_bytes), recalcTimestamp=False, lazy=False)
-        cls.source = TTFont(generate.SOURCE_FILE, recalcTimestamp=False, lazy=False)
+        cls.source = TTFont(
+            generate.ADOBE_NOTDEF_FILE, recalcTimestamp=False, lazy=False
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -221,12 +230,33 @@ class TofuMonoFontTest(unittest.TestCase):
         glyph_name = self.font.getGlyphName(1)
         glyph = self.font["glyf"][glyph_name]
 
-        self.assertEqual(self.font["hmtx"][glyph_name], (500, 63))
-        self.assertEqual(glyph.numberOfContours, 2)
+        font_info = plistlib.loads(generate.LAST_RESORT_INFO_FILE.read_bytes())
+        source_units_per_em = font_info["unitsPerEm"]
+        source_glyph = ET.parse(generate.LAST_RESORT_FILE).getroot()
+        source_advance = int(source_glyph.find("advance").attrib["width"])
+        scale = self.font["head"].unitsPerEm / source_units_per_em
+        expected_coordinates = []
+        expected_end_points = []
+        for contour in source_glyph.findall("./outline/contour"):
+            for point in contour.findall("point"):
+                expected_coordinates.append(
+                    (
+                        otRound(int(point.attrib["x"]) * scale),
+                        otRound(int(point.attrib["y"]) * scale),
+                    )
+                )
+            expected_end_points.append(len(expected_coordinates) - 1)
+
+        self.assertEqual(source_advance * 2, source_units_per_em)
+        expected_advance = otRound(source_advance * scale)
+        expected_left_side_bearing = min(x for x, _ in expected_coordinates)
         self.assertEqual(
-            (glyph.xMin, glyph.yMin, glyph.xMax, glyph.yMax),
-            (63, 0, 438, 833),
+            self.font["hmtx"][glyph_name],
+            (expected_advance, expected_left_side_bearing),
         )
+        self.assertEqual(list(glyph.coordinates), expected_coordinates)
+        self.assertEqual(glyph.endPtsOfContours, expected_end_points)
+        self.assertTrue(all(flag & 1 for flag in glyph.flags))
 
     def test_uses_unicode_format_13_cmap(self) -> None:
         tables = self.font["cmap"].tables
@@ -270,6 +300,42 @@ class TofuMonoFontTest(unittest.TestCase):
             with self.subTest(character=character):
                 self.assertNotIn(ord(character), cmap)
 
+    def test_cmap_covers_all_non_ambiguous_widths(self) -> None:
+        cmap = self.font.getBestCmap()
+        default_ignorables = {
+            codepoint
+            for start, end in generate.DEFAULT_IGNORABLE_RANGES
+            for codepoint in range(start, end + 1)
+        }
+        errors = []
+
+        for codepoint in range(0x110000):
+            glyph_name = cmap.get(codepoint)
+            if codepoint == 0x20:
+                expected_glyph_id = 2
+            elif 0xD800 <= codepoint <= 0xDFFF or codepoint in default_ignorables:
+                expected_glyph_id = None
+            else:
+                width = unicodedata2.east_asian_width(chr(codepoint))
+                if width in {"H", "Na", "N"}:
+                    expected_glyph_id = 1
+                elif width in {"W", "F"}:
+                    expected_glyph_id = None
+                else:
+                    continue
+
+            actual_glyph_id = (
+                self.font.getGlyphID(glyph_name) if glyph_name is not None else None
+            )
+            if actual_glyph_id != expected_glyph_id:
+                errors.append(
+                    f"U+{codepoint:04X}: expected GID {expected_glyph_id}, got {actual_glyph_id}"
+                )
+                if len(errors) == 10:
+                    break
+
+        self.assertEqual(errors, [])
+
     def test_real_world_mixed_text_has_cell_sized_advances(self) -> None:
         shaped = _shape(self.font_bytes, "A\uff61\u00a1\u3042\U0001f600")
 
@@ -299,6 +365,28 @@ class TofuMonoFontTest(unittest.TestCase):
         self.assertEqual(names.getDebugName(2), "Regular")
         self.assertEqual(names.getDebugName(4), "Tofu Mono Regular")
         self.assertEqual(names.getDebugName(6), "Tofu-Mono")
+
+    def test_os2_character_coverage_matches_cmap(self) -> None:
+        os2 = self.font["OS/2"]
+        actual = (
+            os2.usFirstCharIndex,
+            os2.usLastCharIndex,
+            os2.getUnicodeRanges(),
+            os2.getCodePageRanges(),
+        )
+
+        expected_os2 = copy.copy(os2)
+        expected_os2.updateFirstAndLastCharIndex(self.font)
+        expected = (
+            expected_os2.usFirstCharIndex,
+            expected_os2.usLastCharIndex,
+            expected_os2.recalcUnicodeRanges(self.font),
+            expected_os2.recalcCodePageRanges(self.font),
+        )
+
+        self.assertEqual(actual, expected)
+        self.assertTrue(actual[2])
+        self.assertTrue(actual[3])
 
     def test_generation_is_reproducible(self) -> None:
         self.assertEqual(self.font_bytes, generate.build_mono_font())

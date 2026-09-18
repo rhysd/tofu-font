@@ -1,5 +1,6 @@
 """Generate the Tofu fonts from Adobe NotDef and Last Resort glyphs."""
 
+import plistlib
 import struct
 from io import BytesIO
 from pathlib import Path
@@ -10,18 +11,22 @@ from fontTools.misc.transform import Transform
 from fontTools.pens.transformPen import TransformPointPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen, TTGlyphPointPen
 from fontTools.ttLib import TTFont
+from fontTools.ttLib.tables._g_l_y_f import Glyph
 from fontTools.ttLib.tables.DefaultTable import DefaultTable
+from fontTools.ttLib.tables.O_S_2f_2 import OS2_UNICODE_RANGES, calcCodePageRanges
 from fontTools.ufoLib.glifLib import readGlyphFromString
 
 ROOT = Path(__file__).resolve().parent
-SOURCE_FILE = ROOT / "adobe-notdef" / "AND-Regular.ttf"
-MONO_SOURCE_FILE = ROOT / "last-resort-font" / "font.ufo" / "glyphs" / "_notdef.glif"
-OUTPUT_FILE = ROOT / "dist" / "Tofu.ttf"
-MONO_OUTPUT_FILE = ROOT / "dist" / "Tofu-Mono.ttf"
+ADOBE_NOTDEF_FILE = ROOT / "adobe-notdef" / "AND-Regular.ttf"
+LAST_RESORT_UFO_DIR = ROOT / "last-resort-font" / "font.ufo"
+LAST_RESORT_FILE = LAST_RESORT_UFO_DIR / "glyphs" / "_notdef.glif"
+LAST_RESORT_INFO_FILE = LAST_RESORT_UFO_DIR / "fontinfo.plist"
+DIST_DIR = ROOT / "dist"
+OUTPUT_FILE = DIST_DIR / "Tofu.ttf"
+MONO_OUTPUT_FILE = DIST_DIR / "Tofu-Mono.ttf"
 
 FONT_NAME = "Tofu"
 MONO_FONT_NAME = "Tofu Mono"
-STYLE_NAME = "Regular"
 POSTSCRIPT_NAME = "Tofu-Regular"
 MONO_POSTSCRIPT_NAME = "Tofu-Mono"
 
@@ -51,17 +56,123 @@ DEFAULT_IGNORABLE_RANGES = (
     (0x1D173, 0x1D17A),
     (0xE0000, 0xE0FFF),
 )
+CmapGroup = tuple[int, int, int]
+
+
+class TofuFontBuilder(FontBuilder):
+    """FontBuilder configured with the tables shared by the Tofu fonts."""
+
+    def __init__(self, units_per_em: int) -> None:
+        super().__init__(units_per_em, isTTF=True)
+        self.font["head"].created = FONT_TIMESTAMP
+        self.font["head"].modified = FONT_TIMESTAMP
+
+    def setupFormat13CharacterMap(self, groups: list[CmapGroup]) -> None:
+        subtable_length = 16 + 12 * len(groups)
+        data = struct.pack(">HHHHI", 0, 1, 0, 6, 12)  # Unicode full repertoire
+        data += struct.pack(">HHIII", 13, 0, subtable_length, 0, len(groups))
+        data += b"".join(struct.pack(">III", *group) for group in groups)
+        table = DefaultTable("cmap")
+        table.data = data
+        self.font["cmap"] = table
+
+    def setupCommonTables(
+        self,
+        family_name: str,
+        postscript_name: str,
+        x_avg_char_width: int,
+        is_fixed_pitch: bool,
+    ) -> None:
+        self.setupHorizontalHeader(ascent=880, descent=-120, lineGap=0)
+        self.setupNameTable(
+            {
+                "familyName": family_name,
+                "styleName": "Regular",
+                "fullName": f"{family_name} Regular",
+                "psName": postscript_name,
+            },
+            windows=True,
+            mac=False,
+        )
+        self.setupOS2(
+            version=4,
+            xAvgCharWidth=x_avg_char_width,
+            usWeightClass=400,
+            usWidthClass=5,
+            fsType=0,
+            yStrikeoutSize=50,
+            yStrikeoutPosition=220,
+            achVendID="TOFU",
+            fsSelection=0x0040,  # REGULAR
+            usFirstCharIndex=0,
+            usLastCharIndex=0,
+            sTypoAscender=880,
+            sTypoDescender=-120,
+            sTypoLineGap=0,
+            usWinAscent=880,
+            usWinDescent=120,
+            sxHeight=0,
+            sCapHeight=0,
+            usDefaultChar=0,
+            usBreakChar=32,
+            usMaxContext=0,
+            ulUnicodeRange1=0,
+            ulUnicodeRange2=0,
+            ulUnicodeRange3=0,
+            ulUnicodeRange4=0,
+            ulCodePageRange1=0,
+            ulCodePageRange2=0,
+        )
+        self.setupPost(
+            keepGlyphNames=False,
+            italicAngle=0,
+            underlinePosition=-125,
+            underlineThickness=50,
+            isFixedPitch=is_fixed_pitch,
+        )
+
+    def toBytes(self) -> bytes:
+        output = BytesIO()
+        self.save(output)
+        return output.getvalue()
+
+    def updateOS2CharacterCoverage(self, groups: list[CmapGroup]) -> None:
+        os2 = self.font["OS/2"]
+        os2.usFirstCharIndex = min(0xFFFF, groups[0][0])
+        os2.usLastCharIndex = min(0xFFFF, groups[-1][1])
+
+        def intersects_mapped_range(start: int, end: int) -> bool:
+            for group_start, group_end, _ in groups:
+                if group_start <= end and start <= group_end:
+                    return True
+            return False
+
+        unicode_range_bits = set()
+        for bit, blocks in enumerate(OS2_UNICODE_RANGES):
+            for _, (block_start, block_end) in blocks:
+                if intersects_mapped_range(block_start, block_end):
+                    unicode_range_bits.add(bit)
+                    break
+
+        if intersects_mapped_range(0x10000, 0x10FFFF):
+            unicode_range_bits.add(57)  # Non-Plane 0
+        os2.setUnicodeRanges(unicode_range_bits)
+
+        bmp_codepoints = set()
+        for start, end, _ in groups:
+            bmp_codepoints.update(range(start, min(end, 0xFFFF) + 1))
+        os2.setCodePageRanges(calcCodePageRanges(bmp_codepoints) or {0})
 
 
 def _load_source_font() -> TTFont:
-    if not SOURCE_FILE.is_file():
+    if not ADOBE_NOTDEF_FILE.is_file():
         raise FileNotFoundError(
-            f"Adobe NotDef source font not found: {SOURCE_FILE}. Initialize the git submodules before generating Tofu."
+            f"Adobe NotDef source font not found: {ADOBE_NOTDEF_FILE}. Initialize the git submodules before generating Tofu."
         )
-    return TTFont(SOURCE_FILE, recalcTimestamp=False, lazy=False)
+    return TTFont(ADOBE_NOTDEF_FILE, recalcTimestamp=False, lazy=False)
 
 
-def _copy_notdef(source: TTFont):
+def _copy_notdef(source: TTFont) -> Glyph:
     glyph_set = source.getGlyphSet()
     if ".notdef" not in glyph_set:
         raise ValueError("Adobe NotDef source has no .notdef glyph")
@@ -71,28 +182,33 @@ def _copy_notdef(source: TTFont):
     return pen.glyph()
 
 
-def _load_halfwidth_notdef(units_per_em: int):
-    if not MONO_SOURCE_FILE.is_file():
+def _load_halfwidth_notdef(units_per_em: int) -> Glyph:
+    if not LAST_RESORT_FILE.is_file() or not LAST_RESORT_INFO_FILE.is_file():
         raise FileNotFoundError(
-            f"Last Resort source glyph not found: {MONO_SOURCE_FILE}. Initialize the git submodules before generating Tofu Mono."
+            f"Last Resort source not found: {LAST_RESORT_UFO_DIR}. Initialize the git submodules before generating Tofu Mono."
         )
+
+    font_info = plistlib.loads(LAST_RESORT_INFO_FILE.read_bytes())
+    source_units_per_em = font_info.get("unitsPerEm")
+    if not isinstance(source_units_per_em, int) or source_units_per_em <= 0:
+        raise ValueError(f"Invalid Last Resort unitsPerEm: {source_units_per_em!r}")
 
     class GlyphMetadata:
         pass
 
     metadata = GlyphMetadata()
     pen = TTGlyphPointPen(None)
-    # Last Resort is 2048 UPM. Its .notdef has a 1024-unit advance, so the
-    # normalized glyph naturally occupies half of Tofu's 1000-unit em.
-    transform_pen = TransformPointPen(pen, Transform().scale(units_per_em / 2048))
+    transform_pen = TransformPointPen(
+        pen, Transform().scale(units_per_em / source_units_per_em)
+    )
     readGlyphFromString(
-        MONO_SOURCE_FILE.read_text(encoding="utf-8"),
+        LAST_RESORT_FILE.read_text(encoding="utf-8"),
         glyphObject=metadata,
         pointPen=transform_pen,
     )
-    if metadata.width != 1024:
+    if metadata.width * 2 != source_units_per_em:
         raise ValueError(
-            f"Unexpected Last Resort .notdef advance: {metadata.width} (expected 1024)"
+            f"Last Resort .notdef advance is not half its UPM: {metadata.width} of {source_units_per_em}"
         )
     return pen.glyph()
 
@@ -101,13 +217,13 @@ def _is_default_ignorable(codepoint: int) -> bool:
     return any(start <= codepoint <= end for start, end in DEFAULT_IGNORABLE_RANGES)
 
 
-def _halfwidth_ranges() -> list[tuple[int, int, int]]:
+def _halfwidth_ranges() -> list[CmapGroup]:
     """Return format 13 groups for Unicode 17 halfwidth characters.
 
     East Asian Width H, Na, and N require the halfwidth tofu; W and F require
     the fullwidth GID 0. Ambiguous-width (A) characters are flexible: an A
     range is included only when it belongs to a contiguous component that
-    contains a required-halfwidth character. This connects halfwidth ranges
+    contains a definite-halfwidth character. This connects halfwidth ranges
     without creating groups for isolated A ranges and therefore minimizes the
     number of format 13 groups. Space maps to a blank halfwidth glyph so
     HarfBuzz can hide default ignorables without using a visible tofu outline.
@@ -119,117 +235,32 @@ def _halfwidth_ranges() -> list[tuple[int, int, int]]:
 
     groups = []
     start = None
-    has_required_halfwidth = False
+    has_halfwidth = False
     for codepoint in range(0x110001):
-        if codepoint == 0x110000:
-            kind = "barrier"
-        elif codepoint == 0x20:
-            kind = "space"
-        elif 0xD800 <= codepoint <= 0xDFFF or _is_default_ignorable(codepoint):
-            kind = "barrier"
-        else:
+        is_space = codepoint == 0x20
+        is_unicode_scalar = codepoint < 0x110000 and not (0xD800 <= codepoint <= 0xDFFF)
+        if is_unicode_scalar and not is_space and not _is_default_ignorable(codepoint):
             width = unicodedata2.east_asian_width(chr(codepoint))
-            if width in {"H", "Na", "N"}:
-                kind = "required"
-            elif width == "A":
-                kind = "flexible"
-            else:
-                kind = "barrier"
+        else:
+            width = None
 
-        if kind in {"required", "flexible"}:
+        is_halfwidth = width in {"H", "Na", "N"}
+        if is_halfwidth or width == "A":
             if start is not None:
-                has_required_halfwidth |= kind == "required"
+                has_halfwidth |= is_halfwidth
                 continue
             start = codepoint
-            has_required_halfwidth = kind == "required"
+            has_halfwidth = is_halfwidth
             continue
 
-        if start is not None and has_required_halfwidth:
+        # Fullwidth and non-rendering characters terminate the current range.
+        if start is not None and has_halfwidth:
             groups.append((start, codepoint - 1, 1))
         start = None
-        has_required_halfwidth = False
-        if kind == "space":
+        has_halfwidth = False
+        if is_space:
             groups.append((codepoint, codepoint, 2))
     return groups
-
-
-def _format_13_cmap(groups: list[tuple[int, int, int]]) -> DefaultTable:
-    subtable_length = 16 + 12 * len(groups)
-    data = struct.pack(">HHHHI", 0, 1, 0, 6, 12)  # Unicode full repertoire
-    data += struct.pack(">HHIII", 13, 0, subtable_length, 0, len(groups))
-    data += b"".join(struct.pack(">III", *group) for group in groups)
-    table = DefaultTable("cmap")
-    table.data = data
-    return table
-
-
-def _setup_common_tables(
-    builder: FontBuilder,
-    family_name: str,
-    postscript_name: str,
-    x_avg_char_width: int,
-    is_fixed_pitch: int,
-) -> None:
-    builder.setupHorizontalHeader(ascent=880, descent=-120, lineGap=0)
-    builder.setupNameTable(
-        {
-            "familyName": family_name,
-            "styleName": STYLE_NAME,
-            "fullName": f"{family_name} {STYLE_NAME}",
-            "psName": postscript_name,
-        },
-        windows=True,
-        mac=False,
-    )
-    builder.setupOS2(
-        version=4,
-        xAvgCharWidth=x_avg_char_width,
-        usWeightClass=400,
-        usWidthClass=5,
-        fsType=0,
-        yStrikeoutSize=50,
-        yStrikeoutPosition=220,
-        achVendID="TOFU",
-        fsSelection=0x0040,  # REGULAR
-        usFirstCharIndex=0,
-        usLastCharIndex=0,
-        sTypoAscender=880,
-        sTypoDescender=-120,
-        sTypoLineGap=0,
-        usWinAscent=880,
-        usWinDescent=120,
-        sxHeight=0,
-        sCapHeight=0,
-        usDefaultChar=0,
-        usBreakChar=32,
-        usMaxContext=0,
-        ulUnicodeRange1=0,
-        ulUnicodeRange2=0,
-        ulUnicodeRange3=0,
-        ulUnicodeRange4=0,
-        ulCodePageRange1=0,
-        ulCodePageRange2=0,
-    )
-    builder.setupPost(
-        keepGlyphNames=False,
-        italicAngle=0,
-        underlinePosition=-125,
-        underlineThickness=50,
-        isFixedPitch=is_fixed_pitch,
-    )
-
-
-def _new_builder(units_per_em: int) -> FontBuilder:
-    builder = FontBuilder(units_per_em, isTTF=True)
-    builder.font["head"].created = FONT_TIMESTAMP
-    builder.font["head"].modified = FONT_TIMESTAMP
-    return builder
-
-
-def _save(builder: FontBuilder) -> bytes:
-    output = BytesIO()
-    builder.save(output)
-    return output.getvalue()
 
 
 def build_font() -> bytes:
@@ -242,15 +273,15 @@ def build_font() -> bytes:
     finally:
         source.close()
 
-    builder = _new_builder(units_per_em)
+    builder = TofuFontBuilder(units_per_em)
     builder.setupGlyphOrder([".notdef"])
     # Tofu is selected explicitly as nuv's final fallback. An empty cmap makes
     # every character resolve to GID 0 while keeping maxp.numGlyphs exactly 1.
     builder.setupCharacterMap({})
     builder.setupGlyf({".notdef": glyph})
     builder.setupHorizontalMetrics({".notdef": (advance_width, left_side_bearing)})
-    _setup_common_tables(builder, FONT_NAME, POSTSCRIPT_NAME, advance_width, 1)
-    return _save(builder)
+    builder.setupCommonTables(FONT_NAME, POSTSCRIPT_NAME, advance_width, True)
+    return builder.toBytes()
 
 
 def build_mono_font() -> bytes:
@@ -265,7 +296,7 @@ def build_mono_font() -> bytes:
     halfwidth_glyph = _load_halfwidth_notdef(units_per_em)
     blank_pen = TTGlyphPen(None)
 
-    builder = _new_builder(units_per_em)
+    builder = TofuFontBuilder(units_per_em)
     builder.font["head"].flags |= 1 << 14  # Last Resort font
     builder.setupGlyphOrder([".notdef", "tofu.half", "space"])
     builder.setupGlyf(
@@ -282,9 +313,11 @@ def build_mono_font() -> bytes:
             "space": (500, 0),
         }
     )
-    builder.font["cmap"] = _format_13_cmap(_halfwidth_ranges())
-    _setup_common_tables(builder, MONO_FONT_NAME, MONO_POSTSCRIPT_NAME, 500, 0)
-    return _save(builder)
+    groups = _halfwidth_ranges()
+    builder.setupFormat13CharacterMap(groups)
+    builder.setupCommonTables(MONO_FONT_NAME, MONO_POSTSCRIPT_NAME, 500, False)
+    builder.updateOS2CharacterCoverage(groups)
+    return builder.toBytes()
 
 
 def main() -> None:
@@ -292,7 +325,7 @@ def main() -> None:
         (OUTPUT_FILE, build_font()),
         (MONO_OUTPUT_FILE, build_mono_font()),
     )
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
     for path, font in fonts:
         path.write_bytes(font)
         print(f"Generated {path.relative_to(ROOT)} ({len(font)} bytes)")
