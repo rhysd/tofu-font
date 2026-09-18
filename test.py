@@ -13,6 +13,7 @@ import generate
 
 ROOT = Path(__file__).resolve().parent
 FONT_PATH = ROOT / "dist" / "Tofu.ttf"
+MONO_FONT_PATH = ROOT / "dist" / "Tofu-Mono.ttf"
 EXPECTED_TABLES = {
     "OS/2",
     "cmap",
@@ -178,6 +179,135 @@ class TofuFontTest(unittest.TestCase):
 
         self.assertEqual([info.codepoint for info, _ in shaped], [0, 0])
         self.assertEqual([pos.x_advance for _, pos in shaped], [1000, 0])
+
+
+class TofuMonoFontTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not MONO_FONT_PATH.is_file():
+            raise RuntimeError(
+                f"Generated font does not exist: {MONO_FONT_PATH}. Run `python ./generate.py` before running the tests."
+            )
+        cls.font_bytes = MONO_FONT_PATH.read_bytes()
+        cls.font = TTFont(BytesIO(cls.font_bytes), recalcTimestamp=False, lazy=False)
+        cls.source = TTFont(generate.SOURCE_FILE, recalcTimestamp=False, lazy=False)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.font.close()
+        cls.source.close()
+
+    def glyph_id_for(self, character: str) -> int:
+        glyph_name = self.font.getBestCmap().get(ord(character), ".notdef")
+        return self.font.getGlyphID(glyph_name)
+
+    def test_has_only_required_tables(self) -> None:
+        self.assertEqual(set(self.font.keys()) - {"GlyphOrder"}, EXPECTED_TABLES)
+
+    def test_has_two_tofu_glyphs_and_one_blank_space(self) -> None:
+        self.assertEqual(self.font["maxp"].numGlyphs, 3)
+        self.assertEqual(self.font.getGlyphID(".notdef"), 0)
+        self.assertEqual(self.font.getGlyphID("space"), 2)
+        self.assertEqual(self.font["glyf"]["space"].numberOfContours, 0)
+
+    def test_fullwidth_outline_matches_adobe_notdef(self) -> None:
+        self.assertEqual(
+            _record_glyph(self.font, ".notdef"),
+            _record_glyph(self.source, ".notdef"),
+        )
+        self.assertEqual(self.font["hmtx"][".notdef"], (1000, 100))
+
+    def test_halfwidth_outline_matches_last_resort_metrics(self) -> None:
+        glyph_name = self.font.getGlyphName(1)
+        glyph = self.font["glyf"][glyph_name]
+
+        self.assertEqual(self.font["hmtx"][glyph_name], (500, 63))
+        self.assertEqual(glyph.numberOfContours, 2)
+        self.assertEqual(
+            (glyph.xMin, glyph.yMin, glyph.xMax, glyph.yMax),
+            (63, 0, 438, 833),
+        )
+
+    def test_uses_unicode_format_13_cmap(self) -> None:
+        tables = self.font["cmap"].tables
+        self.assertEqual(len(tables), 1)
+        self.assertEqual(
+            (tables[0].format, tables[0].platformID, tables[0].platEncID),
+            (13, 0, 6),
+        )
+        self.assertEqual(tables[0].nGroups, 132)
+        self.assertTrue(self.font["head"].flags & (1 << 14))
+
+    def test_direct_lookup_uses_halfwidth_tofu(self) -> None:
+        # ASCII, neutral-width Arabic, and halfwidth katakana exercise the
+        # direct cmap lookup used by nuv's fast path.
+        font = hb.Font(hb.Face(self.font_bytes))
+        for character in ("A", "\u0645", "\uff61"):
+            with self.subTest(character=character):
+                self.assertEqual(self.glyph_id_for(character), 1)
+                self.assertEqual(font.get_nominal_glyph(ord(character)), 1)
+
+    def test_wide_characters_use_fullwidth_tofu(self) -> None:
+        for character in ("\u3042", "\U0001f600"):
+            with self.subTest(character=character):
+                self.assertEqual(self.glyph_id_for(character), 0)
+
+    def test_ambiguous_width_is_chosen_to_minimize_cmap_groups(self) -> None:
+        # These A characters connect required-halfwidth ranges.
+        for character in ("\u00a1", "\u03b1"):
+            with self.subTest(character=character):
+                self.assertEqual(self.glyph_id_for(character), 1)
+
+        # These A-only islands are surrounded by wide characters, so omitting
+        # them avoids creating extra format 13 groups.
+        for character in ("\u26c6", "\ue000"):
+            with self.subTest(character=character):
+                self.assertEqual(self.glyph_id_for(character), 0)
+
+    def test_default_ignorables_are_not_advertised_by_cmap(self) -> None:
+        cmap = self.font.getBestCmap()
+        for character in ("\u00ad", "\u200d", "\ufe0f", "\U000e0100"):
+            with self.subTest(character=character):
+                self.assertNotIn(ord(character), cmap)
+
+    def test_real_world_mixed_text_has_cell_sized_advances(self) -> None:
+        shaped = _shape(self.font_bytes, "A\uff61\u00a1\u3042\U0001f600")
+
+        self.assertEqual([info.codepoint for info, _ in shaped], [1, 1, 1, 0, 0])
+        self.assertEqual(
+            [position.x_advance for _, position in shaped],
+            [500, 500, 500, 1000, 1000],
+        )
+
+    def test_space_is_blank_and_halfwidth(self) -> None:
+        shaped = _shape(self.font_bytes, " ")
+
+        self.assertEqual([info.codepoint for info, _ in shaped], [2])
+        self.assertEqual([position.x_advance for _, position in shaped], [500])
+
+    def test_default_ignorables_resolve_to_blank_zero_width_glyph(self) -> None:
+        shaped = _shape(self.font_bytes, "\u200c\u200d\u2060\ufe0f")
+
+        self.assertEqual([info.codepoint for info, _ in shaped], [2] * 4)
+        self.assertEqual([position.x_advance for _, position in shaped], [0] * 4)
+        self.assertEqual(self.font["glyf"]["space"].numberOfContours, 0)
+
+    def test_font_names(self) -> None:
+        names = self.font["name"]
+        self.assertEqual({record.nameID for record in names.names}, {1, 2, 4, 6})
+        self.assertEqual(names.getDebugName(1), "Tofu Mono")
+        self.assertEqual(names.getDebugName(2), "Regular")
+        self.assertEqual(names.getDebugName(4), "Tofu Mono Regular")
+        self.assertEqual(names.getDebugName(6), "Tofu-Mono")
+
+    def test_generation_is_reproducible(self) -> None:
+        self.assertEqual(self.font_bytes, generate.build_mono_font())
+
+    def test_font_is_small(self) -> None:
+        self.assertLessEqual(len(self.font_bytes), 8192)
+
+    def test_sfnt_checksum_is_valid(self) -> None:
+        self.assertEqual(_sfnt_checksum(self.font_bytes), 0xB1B0AFBA)
 
 
 if __name__ == "__main__":

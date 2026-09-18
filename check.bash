@@ -6,5 +6,5 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 set -x
 
-ruff format --check .
-ruff check .
+ruff format --check --exclude adobe-notdef --exclude last-resort-font .
+ruff check --exclude adobe-notdef --exclude last-resort-font .

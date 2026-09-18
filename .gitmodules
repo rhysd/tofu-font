@@ -1,3 +1,6 @@
 [submodule "adobe-notdef"]
 	path = adobe-notdef
 	url = https://github.com/adobe-fonts/adobe-notdef.git
+[submodule "last-resort-font"]
+	path = last-resort-font
+	url = https://github.com/unicode-org/last-resort-font

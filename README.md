@@ -2,19 +2,20 @@ Tofu font
 =========
 [![CI badge][]][CI]
 
-[Tofu font][] is a special-purpose font that contains a single [`.notdef` glyph][wikipedia], "tofu". Tofu is designed to
-be embedded in an application binary and is only 688 bytes. Its `cmap` is intentionally empty. When an application
-explicitly selects `.notdef` glyph as its final fallback and shapes text, unsupported visible characters resolve to the
-`.notdef` glyph. 
+[Tofu font][] provides tiny final-fallback fonts which display unsupported characters as a visible [`.notdef`
+glyph][wikipedia], "tofu". They are designed to be embedded in application binaries.
 
-Because the empty `cmap` advertises no character coverage, the application must explicitly select Tofu and must be able
-to shape missing characters to glyph ID 0.
+`Tofu.ttf` is only 688 bytes. Its `cmap` is intentionally empty and it only contains a single glyph for `.notdef`. An
+application must explicitly select Tofu as its final fallback and shape missing characters to glyph ID 0.
+
+`Tofu-Mono.ttf` is 2,324 bytes and intended for fixed-cell rendering such as terminals. It uses a `cmap` format 13
+subtable to select a fullwidth or halfwidth tofu glyphs for fitting to the character width.
 
 ## Download
 
 Download `tofu-font.zip` from the latest release on the [releases page][releases].
 
-Alternatively generate `Tofu.ttf` following the instruction in the Development section below.
+Alternatively generate `Tofu.ttf` and `Tofu-Mono.ttf` following the instructions in the Development section below.
 
 ## Comparison with existing fonts
 
@@ -27,6 +28,7 @@ Alternatively generate `Tofu.ttf` following the instruction in the Development s
 | Font | Version | Size (bytes) |
 |-|-|-:|
 | Tofu.ttf | 1.0.0 | 688 |
+| Tofu-Mono.ttf | 1.0.0 | 2,324 |
 | AND-Regular.otf | 1.001 | 20,896 |
 | AND-Regular.ttf | 1.001 | 219,320 |
 | LastResortHE-Regular.ttf | 18.000 | 587,864 |
@@ -34,8 +36,9 @@ Alternatively generate `Tofu.ttf` following the instruction in the Development s
 
 ## License
 
-This font is derived from [Adobe NotDef][] and is distributed under the same license, the SIL Open Font License v1.1.
-See the [LICENSE file](./LICENSE) for details. Always include the LICENSE file when redistributing `Tofu.ttf`.
+`Tofu.ttf` is derived from [Adobe NotDef][]. `Tofu-Mono.ttf` is derived from [Adobe NotDef][] and [Last Resort][].
+They are distributed under the SIL Open Font License v1.1. See the [LICENSE file](./LICENSE) for details.
+Always include the LICENSE file when redistributing either font.
 
 ## Development
 
@@ -48,7 +51,7 @@ python -m venv venv
 source ./venv/bin/activate
 pip install -r ./requirements.txt
 
-# Generate the TTF font file in ./dist directory
+# Generate both TTF font files in ./dist directory
 python ./generate.py
 
 # Run tests for the generated font
