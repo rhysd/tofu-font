@@ -1,4 +1,5 @@
 fonttools==4.60.2
-unicodedata2==17.0.0
-uharfbuzz==0.51.7
 ruff==0.16.8
+ty==0.0.82
+uharfbuzz==0.51.7
+unicodedata2==17.0.0

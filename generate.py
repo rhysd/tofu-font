@@ -194,7 +194,7 @@ def _load_halfwidth_notdef(units_per_em: int) -> Glyph:
         raise ValueError(f"Invalid Last Resort unitsPerEm: {source_units_per_em!r}")
 
     class GlyphMetadata:
-        pass
+        width: int
 
     metadata = GlyphMetadata()
     pen = TTGlyphPointPen(None)

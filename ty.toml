@@ -1,0 +1,5 @@
+[analysis]
+allowed-unresolved-imports = ["unicodedata2"]
+
+[src]
+include = ["generate.py", "test.py"]

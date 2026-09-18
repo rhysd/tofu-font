@@ -8,3 +8,4 @@ set -x
 
 ruff format --check --exclude adobe-notdef --exclude last-resort-font .
 ruff check --exclude adobe-notdef --exclude last-resort-font .
+ty check

@@ -48,13 +48,14 @@ def _sfnt_checksum(data: bytes) -> int:
 
 def _shape(font_bytes: bytes, text: str):
     """Shape text as an application would when Tofu is the final fallback."""
-    face = hb.Face(font_bytes)
-    font = hb.Font(face)
+    # uharfbuzz exposes these names from a native extension without type hints.
+    face = hb.Face(font_bytes)  # ty: ignore[unresolved-attribute]
+    font = hb.Font(face)  # ty: ignore[unresolved-attribute]
     font.scale = (face.upem, face.upem)
-    buffer = hb.Buffer()
+    buffer = hb.Buffer()  # ty: ignore[unresolved-attribute]
     buffer.add_str(text)
     buffer.guess_segment_properties()
-    hb.shape(font, buffer)
+    hb.shape(font, buffer)  # ty: ignore[unresolved-attribute]
     return list(zip(buffer.glyph_infos, buffer.glyph_positions))
 
 
@@ -233,7 +234,9 @@ class TofuMonoFontTest(unittest.TestCase):
         font_info = plistlib.loads(generate.LAST_RESORT_INFO_FILE.read_bytes())
         source_units_per_em = font_info["unitsPerEm"]
         source_glyph = ET.parse(generate.LAST_RESORT_FILE).getroot()
-        source_advance = int(source_glyph.find("advance").attrib["width"])
+        advance = source_glyph.find("advance")
+        assert advance is not None
+        source_advance = int(advance.attrib["width"])
         scale = self.font["head"].unitsPerEm / source_units_per_em
         expected_coordinates = []
         expected_end_points = []
@@ -271,7 +274,8 @@ class TofuMonoFontTest(unittest.TestCase):
     def test_direct_lookup_uses_halfwidth_tofu(self) -> None:
         # ASCII, neutral-width Arabic, and halfwidth katakana exercise the
         # direct cmap lookup used by nuv's fast path.
-        font = hb.Font(hb.Face(self.font_bytes))
+        # uharfbuzz exposes these names from a native extension without type hints.
+        font = hb.Font(hb.Face(self.font_bytes))  # ty: ignore[unresolved-attribute]
         for character in ("A", "\u0645", "\uff61"):
             with self.subTest(character=character):
                 self.assertEqual(self.glyph_id_for(character), 1)
