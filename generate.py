@@ -213,10 +213,6 @@ def _load_halfwidth_notdef(units_per_em: int) -> Glyph:
     return pen.glyph()
 
 
-def _is_default_ignorable(codepoint: int) -> bool:
-    return any(start <= codepoint <= end for start, end in DEFAULT_IGNORABLE_RANGES)
-
-
 def _halfwidth_ranges() -> list[CmapGroup]:
     """Return format 13 groups for Unicode 17 halfwidth characters.
 
@@ -233,13 +229,17 @@ def _halfwidth_ranges() -> list[CmapGroup]:
             f"Expected Unicode data 17.0.0, got {unicodedata2.unidata_version}"
         )
 
+    default_ignorables = set()
+    for start, end in DEFAULT_IGNORABLE_RANGES:
+        default_ignorables.update(range(start, end + 1))
+
     groups = []
     start = None
     has_halfwidth = False
     for codepoint in range(0x110001):
         is_space = codepoint == 0x20
         is_unicode_scalar = codepoint < 0x110000 and not (0xD800 <= codepoint <= 0xDFFF)
-        if is_unicode_scalar and not is_space and not _is_default_ignorable(codepoint):
+        if is_unicode_scalar and not is_space and codepoint not in default_ignorables:
             width = unicodedata2.east_asian_width(chr(codepoint))
         else:
             width = None
