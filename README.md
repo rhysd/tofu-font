@@ -63,6 +63,9 @@ python ./test.py
 
 # Check Python source code with ruff
 bash ./check.bash
+
+# Setup git hooks
+git config core.hooksPath .git-hooks
 ```
 
 [Tofu font]: https://github.com/rhysd/tofu-font
