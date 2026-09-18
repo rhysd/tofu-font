@@ -11,6 +11,10 @@ application must explicitly select Tofu as its final fallback and shape missing 
 `Tofu-Mono.ttf` is 2,324 bytes and intended for fixed-cell rendering such as terminals. It uses a `cmap` format 13
 subtable to select a fullwidth or halfwidth tofu glyphs for fitting to the character width.
 
+Preview of Tofu-Mono font:
+
+<img src="https://github.com/rhysd/ss/blob/master/tofu-font/tofu-mono-preview.png?raw=true" width="1024" height="462" alt="Preview text rendered with Tofu-Mono"/>
+
 ## Download
 
 Download `tofu-font.zip` from the latest release on the [releases page][releases].
