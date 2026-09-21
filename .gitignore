@@ -1,3 +1,2 @@
-/dist/Tofu.ttf
-/dist/Tofu-Mono.ttf
+/dist/*.ttf
 /venv
