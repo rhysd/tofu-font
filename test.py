@@ -261,6 +261,15 @@ class TofuMonoFontTest(unittest.TestCase):
         self.assertEqual(glyph.endPtsOfContours, expected_end_points)
         self.assertTrue(all(flag & 1 for flag in glyph.flags))
 
+    def test_glyphs_have_no_hinting(self) -> None:
+        for glyph_name in self.font.getGlyphOrder():
+            glyph = self.font["glyf"][glyph_name]
+            bytecode = glyph.program.getBytecode() if hasattr(glyph, "program") else b""
+            with self.subTest(glyph_name=glyph_name):
+                self.assertEqual(bytecode, b"")
+
+        self.assertEqual(self.font["maxp"].maxSizeOfInstructions, 0)
+
     def test_uses_unicode_format_13_cmap(self) -> None:
         tables = self.font["cmap"].tables
         self.assertEqual(len(tables), 1)
@@ -280,6 +289,27 @@ class TofuMonoFontTest(unittest.TestCase):
             with self.subTest(character=character):
                 self.assertEqual(self.glyph_id_for(character), 1)
                 self.assertEqual(font.get_nominal_glyph(ord(character)), 1)
+
+    def test_harfbuzz_lookup_matches_format_13_group_boundaries(self) -> None:
+        # Exercise the serialized cmap through the same API used by an
+        # application, including every group edge and every unmapped gap.
+        font = hb.Font(hb.Face(self.font_bytes))  # ty: ignore[unresolved-attribute]
+        groups = generate._halfwidth_ranges()
+
+        for start, end, glyph_id in groups:
+            with self.subTest(boundary="start", codepoint=start):
+                self.assertEqual(font.get_nominal_glyph(start), glyph_id)
+            with self.subTest(boundary="end", codepoint=end):
+                self.assertEqual(font.get_nominal_glyph(end), glyph_id)
+
+        for index in range(1, len(groups)):
+            previous_end = groups[index - 1][1]
+            next_start = groups[index][0]
+            if previous_end + 1 == next_start:
+                continue
+            for codepoint in (previous_end + 1, next_start - 1):
+                with self.subTest(boundary="gap", codepoint=codepoint):
+                    self.assertIsNone(font.get_nominal_glyph(codepoint))
 
     def test_wide_characters_use_fullwidth_tofu(self) -> None:
         for character in ("\u3042", "\U0001f600"):
