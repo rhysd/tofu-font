@@ -69,7 +69,12 @@ class TofuFontBuilder(FontBuilder):
 
     def setupFormat13CharacterMap(self, groups: list[CmapGroup]) -> None:
         subtable_length = 16 + 12 * len(groups)
-        data = struct.pack(">HHHHI", 0, 1, 0, 6, 12)  # Unicode full repertoire
+        # Share one format 13 subtable between the standard Unicode encoding
+        # and the Microsoft encoding recognized by Windows and Chromium OTS.
+        subtable_offset = 20
+        data = struct.pack(">HH", 0, 2)
+        data += struct.pack(">HHI", 0, 6, subtable_offset)
+        data += struct.pack(">HHI", 3, 10, subtable_offset)
         data += struct.pack(">HHIII", 13, 0, subtable_length, 0, len(groups))
         data += b"".join(struct.pack(">III", *group) for group in groups)
         table = DefaultTable("cmap")

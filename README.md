@@ -8,7 +8,7 @@ glyph][wikipedia], "tofu". They are designed to be embedded in application binar
 `Tofu.ttf` is only 688 bytes. Its `cmap` is intentionally empty and it only contains a single glyph for `.notdef`. An
 application must explicitly select Tofu as its final fallback and shape missing characters to glyph ID 0.
 
-`Tofu-Mono.ttf` is 2,324 bytes and intended for fixed-cell rendering such as terminals. It uses a `cmap` format 13
+`Tofu-Mono.ttf` is 2,332 bytes and intended for fixed-cell rendering such as terminals. It uses a `cmap` format 13
 subtable to select a fullwidth or halfwidth tofu glyphs for fitting to the character width.
 
 Preview of Tofu-Mono font:
@@ -23,9 +23,9 @@ Alternatively generate `Tofu.ttf` and `Tofu-Mono.ttf` following the instructions
 
 ## Comparison with existing fonts
 
-- [Google Fonts Tofu][] has the same family name and purpose as Tofu. It maps every Unicode scalar value except U+0000
-  through `cmap` formats 4 and 13 to a single non-zero tofu glyph. `Tofu.ttf` is smaller because it uses glyph ID 0
-  with an empty `cmap`; `Tofu-Mono.ttf` additionally selects tofu glyphs by character width.
+- [Google Fonts Tofu][] has the same family name and purpose as Tofu. It maps every code point except U+0000 and
+  U+FE0F through `cmap` formats 4 and 13 to a single non-zero tofu glyph. `Tofu.ttf` is smaller because it uses glyph
+  ID 0 with an empty `cmap`; `Tofu-Mono.ttf` additionally selects tofu glyphs by character width.
 - [Adobe NotDef][] is a font for the same purpose as Tofu. It explicitly maps 1,111,998 Unicode code points through
   `cmap` formats 4 and 12 to 2,048 non-zero tofu glyphs. Tofu is smaller because it has an empty `cmap` and only glyph
   ID 0.
@@ -35,7 +35,7 @@ Alternatively generate `Tofu.ttf` and `Tofu-Mono.ttf` following the instructions
 | Font | Version | Size (bytes) |
 |-|-|-:|
 | Tofu.ttf | 1.0.0 | 688 |
-| Tofu-Mono.ttf | 1.0.0 | 2,324 |
+| Tofu-Mono.ttf | 1.0.0 | 2,332 |
 | Google Fonts tofu.ttf | 1.000 | 1,252 |
 | AND-Regular.otf | 1.001 | 20,896 |
 | AND-Regular.ttf | 1.001 | 219,320 |

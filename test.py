@@ -272,12 +272,24 @@ class TofuMonoFontTest(unittest.TestCase):
 
     def test_uses_unicode_format_13_cmap(self) -> None:
         tables = self.font["cmap"].tables
-        self.assertEqual(len(tables), 1)
         self.assertEqual(
-            (tables[0].format, tables[0].platformID, tables[0].platEncID),
-            (13, 0, 6),
+            {(table.format, table.platformID, table.platEncID) for table in tables},
+            {(13, 0, 6), (13, 3, 10)},
         )
-        self.assertEqual(tables[0].nGroups, 132)
+        for table in tables:
+            self.assertEqual(table.nGroups, 132)
+            self.assertEqual(table.cmap, tables[0].cmap)
+
+        reader = self.font.reader
+        assert reader is not None
+        cmap_data = reader["cmap"]
+        _, table_count = struct.unpack_from(">HH", cmap_data)
+        offsets = {
+            struct.unpack_from(">HHI", cmap_data, 4 + index * 8)[2]
+            for index in range(table_count)
+        }
+        self.assertEqual(table_count, 2)
+        self.assertEqual(offsets, {4 + table_count * 8})
         self.assertTrue(self.font["head"].flags & (1 << 14))
 
     def test_direct_lookup_uses_halfwidth_tofu(self) -> None:
