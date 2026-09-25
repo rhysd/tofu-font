@@ -23,6 +23,9 @@ Alternatively generate `Tofu.ttf` and `Tofu-Mono.ttf` following the instructions
 
 ## Comparison with existing fonts
 
+- [Google Fonts Tofu][] has the same family name and purpose as Tofu. It maps every Unicode scalar value except U+0000
+  through `cmap` formats 4 and 13 to a single non-zero tofu glyph. `Tofu.ttf` is smaller because it uses glyph ID 0
+  with an empty `cmap`; `Tofu-Mono.ttf` additionally selects tofu glyphs by character width.
 - [Adobe NotDef][] is a font for the same purpose as Tofu. It explicitly maps 1,111,998 Unicode code points through
   `cmap` formats 4 and 12 to 2,048 non-zero tofu glyphs. Tofu is smaller because it has an empty `cmap` and only glyph
   ID 0.
@@ -33,6 +36,7 @@ Alternatively generate `Tofu.ttf` and `Tofu-Mono.ttf` following the instructions
 |-|-|-:|
 | Tofu.ttf | 1.0.0 | 688 |
 | Tofu-Mono.ttf | 1.0.0 | 2,324 |
+| Google Fonts tofu.ttf | 1.000 | 1,252 |
 | AND-Regular.otf | 1.001 | 20,896 |
 | AND-Regular.ttf | 1.001 | 219,320 |
 | LastResortHE-Regular.ttf | 18.000 | 587,864 |
@@ -71,6 +75,7 @@ git config core.hooksPath .git-hooks
 [Tofu font]: https://github.com/rhysd/tofu-font
 [wikipedia]: https://en.wikipedia.org/wiki/Notdef_glyph
 [releases]: https://github.com/rhysd/tofu-font/releases
+[Google Fonts Tofu]: https://github.com/googlefonts/tofu
 [Adobe NotDef]: https://github.com/adobe-fonts/adobe-notdef
 [Last Resort]: https://github.com/unicode-org/last-resort-font
 [cmap format 13]: https://learn.microsoft.com/en-us/typography/opentype/spec/cmap#format-13-many-to-one-range-mappings
